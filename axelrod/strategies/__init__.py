@@ -64,6 +64,82 @@ all_strategies += [
 # Distinguished strategy collections in addition to
 # `all_strategies` from _strategies.py
 demo_strategies = [Cooperator, Defector, TitForTat, Grudger, Random]
+fuzzy_strategies = [TitForTat, Fuzzy]
+
+ognjen_strategies = [
+    TitForTat,
+    FirstByTidemanAndChieruzzi,
+    FirstByNydegger,
+    FirstByGrofman,
+    FirstByShubik,
+    FirstBySteinAndRapoport,
+    Grudger,
+    FirstByDavis,
+    FirstByGraaskamp,
+    FirstByDowning,
+    FirstByFeld,
+    FirstByJoss,
+    FirstByTullock,
+    FirstByAnonymous,
+    Random
+    ]
+ognjen2_strategies = [
+    SecondByAppold,
+    SecondByBlack,
+    SecondByBorufsen,
+    SecondByCave,
+    SecondByChampion,
+    SecondByColbert,
+    SecondByEatherley,
+    SecondByGetzler,
+    SecondByGladstein,
+    SecondByGraaskampKatzen,
+    SecondByHarrington,
+    SecondByKluepfel,
+    SecondByLeyvraz,
+    SecondByMikkelson,
+    SecondByGrofman,
+    SecondByTidemanAndChieruzzi,
+    SecondByRichardHufford,
+    SecondByRowsam,
+    SecondByTester,
+    SecondByTranquilizer,
+    SecondByWeiner,
+    SecondByWhite,
+    SecondByWmAdams,
+    SecondByYamachi,
+    TitForTat,
+    FirstByTidemanAndChieruzzi,
+    FirstByNydegger,
+    FirstByGrofman,
+    FirstByShubik,
+    FirstBySteinAndRapoport,
+    Grudger,
+    FirstByDavis,
+    FirstByGraaskamp,
+    FirstByDowning,
+    FirstByFeld,
+    FirstByJoss,
+    FirstByTullock,
+    FirstByAnonymous,
+    Random
+]
+stewart_plotkin_strategies = [
+    Cooperator,
+    Defector,
+    ZDExtort2,
+    HardGoByMajority,
+    FirstByJoss,
+    HardTitForTat,
+    HardTitFor2Tats,
+    TitForTat,
+    Grudger,
+    GTFT,
+    TitFor2Tats,
+    WinStayLoseShift,
+    Random,
+    ZDGTFT2
+]
 axelrod_first_strategies = [
     TitForTat,
     FirstByTidemanAndChieruzzi,

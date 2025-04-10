@@ -43,7 +43,7 @@ from .axelrod_first import (
     FirstBySteinAndRapoport,
     FirstByTidemanAndChieruzzi,
     FirstByTullock,
-    FirstByAnonymous,
+    FirstByAnonymous
 )
 from .axelrod_second import (
     SecondByAppold,
@@ -69,8 +69,8 @@ from .axelrod_second import (
     SecondByWeiner,
     SecondByWhite,
     SecondByWmAdams,
-    SecondByYamachi,
-)
+    SecondByYamachi
+    )
 from .backstabber import BackStabber, DoubleCrosser
 from .better_and_better import BetterAndBetter
 from .bush_mosteller import BushMosteller
@@ -283,6 +283,9 @@ from .zero_determinant import (
     ZDMischief,
     ZDSet2,
 )
+from .mab import MAB
+from .fuzzy import Fuzzy
+
 
 # Note: Meta* strategies are handled in .__init__.py
 
@@ -369,6 +372,7 @@ all_strategies = [
     Fortress3,
     Fortress4,
     FrequencyAnalyzer,
+    Fuzzy,
     GTFT,
     GeneralSoftGrudger,
     GoByMajority,
@@ -400,6 +404,7 @@ all_strategies = [
     LimitedRetaliate,
     LimitedRetaliate2,
     LimitedRetaliate3,
+    MAB,
     MEM2,
     MathConstantHunter,
     Michaelos,
