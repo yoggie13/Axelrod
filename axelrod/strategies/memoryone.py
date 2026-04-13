@@ -108,7 +108,7 @@ class MemoryOnePlayer(Player):
 
     def set_four_vector(self, four_vector: Tuple[float, float, float, float]):
         if not all(0 <= p <= 1 for p in four_vector):
-            raise ValueError(
+            warnings.warn(
                 "An element in the probability vector, {}, is not "
                 "between 0 and 1.".format(str(four_vector))
             )

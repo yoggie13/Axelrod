@@ -140,6 +140,22 @@ stewart_plotkin_strategies = [
     Random,
     ZDGTFT2
 ]
+vincent_knight_strategies = [
+    EvolvedLookerUp2_2_2,
+    Winner12,
+    EvolvedHMM5,
+    EvolvedFSM16,
+    EvolvedFSM16Noise05, 
+    PSOGambler2_2_2,
+    EvolvedANN,
+    EvolvedANN5,
+    PSOGambler1_1_1,
+    EvolvedFSM4,
+    FoolMeOnce,
+    DBS,
+    DoubleCrosser,
+    BackStabber,
+]
 axelrod_first_strategies = [
     TitForTat,
     FirstByTidemanAndChieruzzi,

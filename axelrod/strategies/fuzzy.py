@@ -9,56 +9,22 @@ from skfuzzy import control as ctrl
 import numpy as np
 from collections import Counter
 import pandas as pd
+from math import exp
+from openpyxl import load_workbook
+import axelrod.WriteToExcel as WriteToExcel
+import torch
+import joblib
+import numpy as np
+
 
 C, D = Action.C, Action.D
 
-class Fuzzy(Player):
-
-    # These are various properties for the strategy
-    name = "Fuzzy"
-    classifier = {
-        "memory_depth": float("inf"),
-        "stochastic": False,
-        "long_run_time": False,
-        "inspects_source": False,
-        "manipulates_source": False,
-        "manipulates_state": False,
-    }
-
-    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
-    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
-    forgivness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgivness')
-    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
-
-    cooperation.automf(names=["low", "medium", "high"])
-    adaptivity.automf(names=["no", "yes"])
-    forgivness.automf(names=["low", "medium", "high"])
-    forgivness['low'] = fuzz.gaussmf(forgivness.universe, 0, 25)
-    forgivness['medium'] = fuzz.trimf(forgivness.universe, [25, 50, 75])
-    stochastic.automf(names=["no", "sometimes", "always"])
-
-    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
-    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 25, 50])
-    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [35, 75, 100])
-
-    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgivness['medium'] | forgivness['high']), resulting_strategy['D'])
-    rule2 = ctrl.Rule(forgivness['low'] & cooperation['high'], resulting_strategy['C'])
-    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
-    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgivness['low']), resulting_strategy['D'])
-    rule5 = ctrl.Rule(cooperation['medium'] & forgivness['medium'] & adaptivity['yes'], resulting_strategy['C'])
-
-    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
-    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
-
-    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
-
-    forgivness_index = 0
-    stochastic_index = 0
-    df = pd.DataFrame(columns=["Coop", "Adap", "Forg", "Stoch", "D", "C"])
-
+class FuzzyMethods():
+    @staticmethod
     def calcCooperation(self, opponent):
         return (Counter(opponent.history)[C])/len(opponent.history)*100
-
+    
+    @staticmethod
     def calcAdaptivity(self, opponent):
         adapCounter = 0
         adapReaction = 0
@@ -99,9 +65,11 @@ class Fuzzy(Player):
         if adapCounter == 0:
             return 0
         
-        return adapReaction/adapCounter*100                     
+        return adapReaction/adapCounter*100
+
     
-    def calcForgivness(self, opponent):
+    @staticmethod
+    def calcforgiveness(self, opponent):
         DCounter = 0
         punishmentCounter = 0
 
@@ -114,11 +82,19 @@ class Fuzzy(Player):
                     else:
                         punishmentCounter += 1
 
+        # if DCounter > 0 and punishmentCounter < DCounter:
+        #     return (100-(punishmentCounter/DCounter*100))
+        # elif punishmentCounter >= DCounter:
+        #     return 0
+        # else:
+        #     return 100                
+
         if punishmentCounter > 0:
             return DCounter/punishmentCounter*100
         else:
             return 100
     
+    @staticmethod
     def calcStochastic(self, opponent):
         patterns = [
             [C, C, C],
@@ -150,39 +126,561 @@ class Fuzzy(Player):
             return 0
         
         return nonStochasticCounter/patternPlayedCounter*100
+    
+    @staticmethod
+    def printToFile(first_time, opponent, coop, adap, forg, stoch, output, played):
+        if first_time is False:
+            WriteToExcel.changeLastCell(opponent.history[-1])
 
+        WriteToExcel.appendRows([len(opponent.history)+1, coop, adap, forg, stoch, output, played, ""])
+    
+    @staticmethod
+    def sigmoid(x, center, scale=10):
+        return 1 / (1 + exp(-scale * (x - center)))
+    
+    @staticmethod
+    def fuzzy_gate(mu_D, mu_C, d_center = 0.4, c_center = 0.6):
+        d_condition = FuzzyMethods.sigmoid(mu_D, center=d_center)
+        c_condition = 1 - FuzzyMethods.sigmoid(mu_C, center=c_center)
+
+        w1 = d_condition * c_condition
+        w2 = 1 - w1
+
+        z1 = 1
+        z2 = 0
+
+        z = (w1 * z1 + w2 * z2) / (w1 + w2 + 1e-6)
+        return z
+    
+    
+class Fuzzy(Player):
+
+    # These are various properties for the strategy
+    name = "Fuzzy"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 25, 50])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [35, 75, 100])
+
+    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgiveness['medium'] | forgiveness['high']), resulting_strategy['D'])
+    rule2 = ctrl.Rule(forgiveness['low'] & cooperation['high'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgiveness['low']), resulting_strategy['D'])
+    rule5 = ctrl.Rule(cooperation['medium'] & forgiveness['medium'] & adaptivity['yes'], resulting_strategy['C'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+
+    
     def strategy(self, opponent: Player) -> Action:
 
         if(len(self.history) == 0 or D not in opponent.history):
             return C
         
         else:
-            self.chosen_strategy.input['cooperation'] = self.calcCooperation(opponent)
-            self.chosen_strategy.input['adaptivity'] = self.calcAdaptivity(opponent)
-            self.chosen_strategy.input['forgivness'] = self.calcForgivness(opponent)
-            self.chosen_strategy.input['stochastic'] = self.calcStochastic(opponent)
+
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
             
             self.chosen_strategy.compute()
 
             d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
             c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
 
-            od = self.chosen_strategy._get_inputs()
+            # output = "C"
 
-            # self.df = pd.concat([self.df, pd.DataFrame({
-            #         "Coop": [od['cooperation']],
-            #         "Adap": [od['adaptivity']],
-            #         "Forg": [od['forgivness']],
-            #         "Stoch": [od['stochastic']],
-            #         "D": [d_membership],
-            #         "C": [c_membership],
-            #         "Chosen": ["D" if d_membership >= 0.4 and c_membership < 0.6 else "C"]
-            #     })], ignore_index=True)
+            # if(d_membership >= 0.4 and c_membership < 0.6):
+            #     output = "D"
 
-            # if(len(self.history) == 199):
-            #     print(self.df)
+            # FuzzyMethods.printToFile(self.first_time, opponent, coop, adap, forg, stoch, output, output)
+           
+            # if self.first_time == True:
+            #     self.first_time = False
 
             if(d_membership >= 0.4 and c_membership < 0.6):
                 return D
+        
+        return C
+
+class FuzzySugeno(Player):
+
+    # These are various properties for the strategy
+    name = "FuzzySugeno"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 25, 50])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [35, 75, 100])
+
+    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgiveness['medium'] | forgiveness['high']), resulting_strategy['D'])
+    rule2 = ctrl.Rule(forgiveness['low'] & cooperation['high'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgiveness['low']), resulting_strategy['D'])
+    rule5 = ctrl.Rule(cooperation['medium'] & forgiveness['medium'] & adaptivity['yes'], resulting_strategy['C'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+ 
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            self.chosen_strategy.compute()
+
+            d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
+            c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
+
+            output = FuzzyMethods.fuzzy_gate(d_membership, c_membership)
+
+            # played = "D" if output > 0.5 else "C"
+
+            # FuzzyMethods.printToFile(self.first_time, opponent, coop, adap, forg, stoch, output, played)
+
+            # if self.first_time == True:
+            #     self.first_time = False
+
+            if(output > 0.5):
+                return D
+        
+        return C
+
+class OptunaFuzzy(Player):
+
+    # These are various properties for the strategy
+    name = "OptunaFuzzyMamdani"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 8, 9])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [59, 60, 99])
+
+    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgiveness['medium'] | forgiveness['high']), resulting_strategy['D'])
+    rule2 = ctrl.Rule(forgiveness['low'] & cooperation['high'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgiveness['low']), resulting_strategy['D'])
+    rule5 = ctrl.Rule(cooperation['medium'] & forgiveness['medium'] & adaptivity['yes'], resulting_strategy['C'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+
+    
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            self.chosen_strategy.compute()
+
+            d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
+            c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
+
+            # output = "C"
+
+            # if(d_membership >= 0.4 and c_membership < 0.6):
+            #     output = "D"
+
+            # FuzzyMethods.printToFile(self.first_time, opponent, coop, adap, forg, stoch, output, output)
+           
+            # if self.first_time == True:
+            #     self.first_time = False
+
+            if(d_membership >= 0.35466 and c_membership < 0.28499):
+                return D
+        
+        return C
+
+class OptunaFuzzySugeno(Player):
+
+    # These are various properties for the strategy
+    name = "OptunaFuzzySugeno"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 26, 28])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [41, 66, 99])
+
+    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgiveness['medium'] | forgiveness['high']), resulting_strategy['D'])
+    rule2 = ctrl.Rule(forgiveness['low'] & cooperation['high'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgiveness['low']), resulting_strategy['D'])
+    rule5 = ctrl.Rule(cooperation['medium'] & forgiveness['medium'] & adaptivity['yes'], resulting_strategy['C'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+ 
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            self.chosen_strategy.compute()
+
+            d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
+            c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
+
+            output = FuzzyMethods.fuzzy_gate(d_membership, c_membership, 0.32685, 0.52012)
+
+            if(output > 0.5):
+                return D
+        
+        return C
+
+class PSOFuzzySugeno(Player):
+
+    # These are various properties for the strategy
+    name = "PSOFuzzySugeno"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 22.887, 40.3935])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [64.26314, 65.8584, 99])
+
+    rule1 = ctrl.Rule(cooperation['high'] & adaptivity['no'] & (forgiveness['medium'] | forgiveness['high']), resulting_strategy['D'])
+    rule2 = ctrl.Rule(forgiveness['low'] & cooperation['high'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(stochastic['always'] | adaptivity['no'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(cooperation['low'] | (cooperation['medium'] & forgiveness['low']), resulting_strategy['D'])
+    rule5 = ctrl.Rule(cooperation['medium'] & forgiveness['medium'] & adaptivity['yes'], resulting_strategy['C'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+ 
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            self.chosen_strategy.compute()
+
+            d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
+            c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
+
+            output = FuzzyMethods.fuzzy_gate(d_membership, c_membership, 0.42124, 0.67085)
+
+            if(output > 0.5):
+                return D
+        
+        return C
+
+class PravilaFuzzy(Player):
+
+    # These are various properties for the strategy
+    name = "PravilaFuzzy"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 25, 50])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [35, 75, 100])
+
+    rule1 = ctrl.Rule(cooperation['medium'] & forgiveness['high'] & stochastic['always'], resulting_strategy['C'])
+    rule2 = ctrl.Rule(cooperation['high'] & forgiveness['medium'] & stochastic['sometimes'], resulting_strategy['D'])
+    rule3 = ctrl.Rule( adaptivity['yes'] & cooperation['medium'] & stochastic['always'], resulting_strategy['D'])
+    
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+
+    
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            try:
+
+                self.chosen_strategy.compute()
+
+                d_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['D'].mf, self.chosen_strategy.output['resulting_strategy'])
+                c_membership = fuzz.interp_membership(self.resulting_strategy.universe, self.resulting_strategy['C'].mf, self.chosen_strategy.output['resulting_strategy'])
+
+                if(d_membership >= 0.4 and c_membership < 0.6):
+                    return D
+            except:
+                return C
+        
+        return C
+
+class Pravila2Fuzzy(Player):
+
+    # These are various properties for the strategy
+    name = "Pravila2Fuzzy"
+    classifier = {
+        "memory_depth": float("inf"),
+        "stochastic": False,
+        "long_run_time": False,
+        "inspects_source": False,
+        "manipulates_source": False,
+        "manipulates_state": False,
+    }
+
+    cooperation = ctrl.Antecedent(np.arange(0, 100, 1), 'cooperation')
+    adaptivity = ctrl.Antecedent(np.arange(0, 100, 1), 'adaptivity')
+    forgiveness = ctrl.Antecedent(np.arange(0, 100, 1), 'forgiveness')
+    stochastic = ctrl.Antecedent(np.arange(0, 100, 1), 'stochastic')
+
+    cooperation.automf(names=["low", "medium", "high"])
+    adaptivity.automf(names=["no", "yes"])
+    forgiveness.automf(names=["low", "medium", "high"])
+    forgiveness['low'] = fuzz.gaussmf(forgiveness.universe, 0, 25)
+    forgiveness['medium'] = fuzz.trimf(forgiveness.universe, [25, 50, 75])
+    stochastic.automf(names=["none", "sometimes", "always"])
+
+    resulting_strategy = ctrl.Consequent(np.arange(0, 100, 1),'resulting_strategy')
+    resulting_strategy['D'] = fuzz.trimf(resulting_strategy.universe, [0, 25, 50])
+    resulting_strategy['C'] = fuzz.trimf(resulting_strategy.universe, [35, 75, 100])
+
+    rule1 = ctrl.Rule(cooperation['medium'] & stochastic['none'], resulting_strategy['C'])
+    rule2 = ctrl.Rule(cooperation['medium'] & forgiveness['low'] & stochastic['always'], resulting_strategy['C'])
+    rule3 = ctrl.Rule(adaptivity['yes'] & cooperation['medium'] & forgiveness['medium'] & stochastic['always'], resulting_strategy['D'])
+    rule4 = ctrl.Rule(adaptivity['yes'] & cooperation['high'] & forgiveness['medium'] & stochastic['always'], resulting_strategy['D'])
+
+    strategy_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4])
+    chosen_strategy = ctrl.ControlSystemSimulation(strategy_ctrl)
+
+    h = {'Name':'', 'Fuzzy' : [], 'Opponent': []}
+
+    forgiveness_index = 0
+    stochastic_index = 0
+    first_time = True
+
+    
+    def strategy(self, opponent: Player) -> Action:
+
+        if(len(self.history) == 0 or D not in opponent.history):
+            return C
+        
+        else:
+
+            coop = FuzzyMethods.calcCooperation(self, opponent)
+            adap = FuzzyMethods.calcAdaptivity(self, opponent)
+            forg = FuzzyMethods.calcforgiveness(self, opponent)
+            stoch = FuzzyMethods.calcStochastic(self, opponent)
+
+            self.chosen_strategy.input['cooperation'] = coop
+            self.chosen_strategy.input['adaptivity'] = adap
+            self.chosen_strategy.input['forgiveness'] = forg
+            self.chosen_strategy.input['stochastic'] = stoch
+            
+            try:
+                self.chosen_strategy.compute()
+                if self.chosen_strategy.output['resulting_strategy'] > 50:
+                    return D
+            except:
+                return C
+            return C
         
         return C

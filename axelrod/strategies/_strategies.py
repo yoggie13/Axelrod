@@ -285,6 +285,15 @@ from .zero_determinant import (
 )
 from .mab import MAB
 from .fuzzy import Fuzzy
+from .fuzzy import FuzzySugeno
+from .fuzzy import OptunaFuzzy
+from .fuzzy import OptunaFuzzySugeno
+from .fuzzy import PSOFuzzySugeno
+from .fuzzy import PravilaFuzzy
+from .fuzzy import Pravila2Fuzzy
+
+
+# from .anfis import ANFISStrategy
 
 
 # Note: Meta* strategies are handled in .__init__.py
@@ -373,6 +382,11 @@ all_strategies = [
     Fortress4,
     FrequencyAnalyzer,
     Fuzzy,
+    FuzzySugeno,
+    OptunaFuzzy,
+    OptunaFuzzySugeno,
+    PSOFuzzySugeno,
+    PravilaFuzzy,
     GTFT,
     GeneralSoftGrudger,
     GoByMajority,
