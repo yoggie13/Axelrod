@@ -286,11 +286,23 @@ from .zero_determinant import (
 from .mab import MAB
 from .fuzzy import Fuzzy
 from .fuzzy import FuzzySugeno
-from .fuzzy import OptunaFuzzy
-from .fuzzy import OptunaFuzzySugeno
-from .fuzzy import PSOFuzzySugeno
-from .fuzzy import PravilaFuzzy
-from .fuzzy import Pravila2Fuzzy
+from .fuzzy import FuzzyMamdaniRules8
+from .fuzzy import FuzzyMamdaniRules7
+from .fuzzy import FuzzyMamdaniRules6
+from .fuzzy import FuzzyMamdaniRules5
+from .fuzzy import FuzzyMamdaniGA
+from .fuzzy import FuzzyMamdaniO
+from .fuzzy import FSGA1
+from .fuzzy import FSGA2
+from .fuzzy import FSGA3
+from .fuzzy import FSO1
+from .fuzzy import FSO2
+from .fuzzy import FSO3
+# from .fuzzy import OptunaFuzzy
+# from .fuzzy import OptunaFuzzySugeno
+# from .fuzzy import PSOFuzzySugeno
+# from .fuzzy import PravilaFuzzy
+# from .fuzzy import Pravila2Fuzzy
 
 
 # from .anfis import ANFISStrategy
@@ -381,12 +393,6 @@ all_strategies = [
     Fortress3,
     Fortress4,
     FrequencyAnalyzer,
-    Fuzzy,
-    FuzzySugeno,
-    OptunaFuzzy,
-    OptunaFuzzySugeno,
-    PSOFuzzySugeno,
-    PravilaFuzzy,
     GTFT,
     GeneralSoftGrudger,
     GoByMajority,
