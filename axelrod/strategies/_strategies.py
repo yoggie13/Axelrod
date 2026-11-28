@@ -301,6 +301,8 @@ from .fuzzy import FSO3
 from .fuzzy import FuzzyMamdaniPSO
 from .fuzzy import FuzzySugenoPSO1
 from .fuzzy import FuzzySugenoPSO2
+from .fuzzy import FuzzyMamdaniCombinedGARules8
+from .fuzzy import FuzzyMamdaniCombinedGARules7
 # from .fuzzy import OptunaFuzzy
 # from .fuzzy import OptunaFuzzySugeno
 # from .fuzzy import PSOFuzzySugeno
