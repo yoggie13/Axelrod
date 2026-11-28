@@ -298,6 +298,9 @@ from .fuzzy import FSGA3
 from .fuzzy import FSO1
 from .fuzzy import FSO2
 from .fuzzy import FSO3
+from .fuzzy import FuzzyMamdaniPSO
+from .fuzzy import FuzzySugenoPSO1
+from .fuzzy import FuzzySugenoPSO2
 # from .fuzzy import OptunaFuzzy
 # from .fuzzy import OptunaFuzzySugeno
 # from .fuzzy import PSOFuzzySugeno
